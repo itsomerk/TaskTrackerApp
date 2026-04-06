@@ -1,111 +1,116 @@
-﻿using System;
+﻿using Microsoft.Data.Sqlite;
+using System;
 using System.Collections.Generic;
-using System.Data.SqlClient;
-using System.Windows.Forms;
+using System.Data.SQLite;
 
 namespace TaskTrackerApp
 {
     public class TaskManager
     {
-        string connectionString = "Server=DESKTOP-T8NAD5P\\SQLEXPRESS;Database=TaskTrackerDB;Trusted_Connection=True;";
+        string connectionString = "Data Source=tasks.db";
 
-        public void TestConnection()
+        public TaskManager()
         {
-            using (SqlConnection conn = new SqlConnection(connectionString))
+            using (var connection = new SqliteConnection(connectionString))
             {
-                conn.Open();
-                MessageBox.Show("SQL Connected!");
+                connection.Open();
+
+                string tableQuery = @"
+                CREATE TABLE IF NOT EXISTS Tasks (
+                    Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    Title TEXT,
+                    Description TEXT,
+                    IsCompleted INTEGER,
+                    DueDate TEXT
+                );";
+
+                var command = new SqliteCommand(tableQuery, connection);
+                command.ExecuteNonQuery();
             }
         }
 
         public List<TaskItem> GetAllTasks()
         {
-            List<TaskItem> tasks = new List<TaskItem>();
+            var list = new List<TaskItem>();
 
-            using (SqlConnection conn = new SqlConnection(connectionString))
+            using (var connection = new SqliteConnection(connectionString))
             {
-                conn.Open();
-                string query = "SELECT * FROM Tasks";
+                connection.Open();
 
-                SqlCommand cmd = new SqlCommand(query, conn);
-                SqlDataReader reader = cmd.ExecuteReader();
+                var command = new SqliteCommand("SELECT * FROM Tasks", connection);
+                var reader = command.ExecuteReader();
 
                 while (reader.Read())
                 {
-                    tasks.Add(new TaskItem
+                    list.Add(new TaskItem
                     {
-                        Id = (int)reader["Id"],
+                        Id = Convert.ToInt32(reader["Id"]),
                         Title = reader["Title"].ToString(),
                         Description = reader["Description"].ToString(),
-                        IsCompleted = (bool)reader["IsCompleted"],
-                        DueDate = (DateTime)reader["DueDate"]
+                        IsCompleted = Convert.ToInt32(reader["IsCompleted"]) == 1,
+                        DueDate = DateTime.Parse(reader["DueDate"].ToString())
                     });
                 }
             }
 
-            return tasks;
+            return list;
         }
 
         public void AddTask(TaskItem task)
         {
-            using (SqlConnection conn = new SqlConnection(connectionString))
+            using (var connection = new SqliteConnection(connectionString))
             {
-                conn.Open();
+                connection.Open();
 
-                string query = "INSERT INTO Tasks (Title, Description, IsCompleted, DueDate) VALUES (@title, @desc, @comp, @date)";
+                var command = new SqliteCommand(
+                    "INSERT INTO Tasks (Title, Description, IsCompleted, DueDate) VALUES (@title,@desc,@comp,@date)",
+                    connection);
 
-                SqlCommand cmd = new SqlCommand(query, conn);
-                cmd.Parameters.AddWithValue("@title", task.Title);
-                cmd.Parameters.AddWithValue("@desc", task.Description);
-                cmd.Parameters.AddWithValue("@comp", task.IsCompleted);
-                cmd.Parameters.AddWithValue("@date", task.DueDate);
+                command.Parameters.AddWithValue("@title", task.Title);
+                command.Parameters.AddWithValue("@desc", task.Description);
+                command.Parameters.AddWithValue("@comp", task.IsCompleted ? 1 : 0);
+                command.Parameters.AddWithValue("@date", task.DueDate.ToString());
 
-                cmd.ExecuteNonQuery();
+                command.ExecuteNonQuery();
             }
         }
 
         public void DeleteTask(int id)
         {
-            using (SqlConnection conn = new SqlConnection(connectionString))
+            using (var connection = new SqliteConnection(connectionString))
             {
-                conn.Open();
+                connection.Open();
 
-                string query = "DELETE FROM Tasks WHERE Id=@id";
+                var command = new SqliteCommand("DELETE FROM Tasks WHERE Id=@id", connection);
+                command.Parameters.AddWithValue("@id", id);
 
-                SqlCommand cmd = new SqlCommand(query, conn);
-                cmd.Parameters.AddWithValue("@id", id);
-
-                cmd.ExecuteNonQuery();
+                command.ExecuteNonQuery();
             }
         }
 
         public void MarkAsCompleted(int id)
         {
-            using (SqlConnection conn = new SqlConnection(connectionString))
-            {
-                conn.Open();
-
-                string query = "UPDATE Tasks SET IsCompleted = 1 WHERE Id=@id";
-
-                SqlCommand cmd = new SqlCommand(query, conn);
-                cmd.Parameters.AddWithValue("@id", id);
-
-                cmd.ExecuteNonQuery();
-            }
+            UpdateStatus(id, true);
         }
 
         public void MarkAsNotCompleted(int id)
         {
-            using (SqlConnection conn = new SqlConnection(connectionString))
+            UpdateStatus(id, false);
+        }
+
+        private void UpdateStatus(int id, bool status)
+        {
+            using (var connection = new SqliteConnection(connectionString))
             {
-                conn.Open();
+                connection.Open();
 
-                string query = "UPDATE Tasks SET IsCompleted = 0 WHERE Id=@id";
+                var command = new SqliteCommand(
+                    "UPDATE Tasks SET IsCompleted=@status WHERE Id=@id", connection);
 
-                SqlCommand cmd = new SqlCommand(query, conn);
-                cmd.Parameters.AddWithValue("@id", id);
+                command.Parameters.AddWithValue("@status", status ? 1 : 0);
+                command.Parameters.AddWithValue("@id", id);
 
-                cmd.ExecuteNonQuery();
+                command.ExecuteNonQuery();
             }
         }
     }
